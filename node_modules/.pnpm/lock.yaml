@@ -9,18 +9,24 @@ importers:
   .:
     dependencies:
       '@tus/file-store':
-        specifier: ^1.5.1
-        version: 1.5.1
+        specifier: ^2.0.0
+        version: 2.0.0
       '@tus/server':
-        specifier: ^1.10.2
-        version: 1.10.2
+        specifier: ^2.1.0
+        version: 2.1.0
       '@tus/utils':
         specifier: ^0.6.0
         version: 0.6.0
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
     devDependencies:
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.17
       '@types/node':
         specifier: ^20.17.30
         version: 20.17.30
@@ -66,21 +72,20 @@ packages:
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
 
-  '@tus/file-store@1.5.1':
-    resolution: {integrity: sha512-bEaZ9zPCezpJW0Cr7rfles+gylXZ+0rSGfQvoTHXoTAbwyy4iIytC25njf1PdWkh3JQU0dKIhZuspnAvVOMntA==}
-    engines: {node: '>=16'}
+  '@tus/file-store@2.0.0':
+    resolution: {integrity: sha512-LTh9L/RoWoo2TbBGPZOuhuyEIIqweoTekT77ZkIVkpYkLK8zTt++PRdY+VyJsLDbFMO9RzvKSBRmj1H8SPdDew==}
+    engines: {node: '>=20.19.0'}
 
-  '@tus/server@1.10.2':
-    resolution: {integrity: sha512-ig5MM886fDTSJ8l37kc/cWSEjl0eaaSv2JtksPSfzrwqx2UXdXwpCwBTLoonJIpMVCdY8nBLNRSCzVRG88KSVA==}
-    engines: {node: '>=16'}
-
-  '@tus/utils@0.5.1':
-    resolution: {integrity: sha512-2crDHBKX0hKZfQXgTF5QIQSccg5fzn8L+oxpVRWAuBbeAdAkBIm4zVXV/LfyuQ1FO5zXW7iV/BI9zNWG5merHQ==}
-    engines: {node: '>=16'}
+  '@tus/server@2.1.0':
+    resolution: {integrity: sha512-RWfCVOHfl91A1BHW5e9mH6nW4XSJP3BBbPHOf2RqZvxhLVDzZXW8j//78wLdkUXUt3iKRLZcbBp89IV4AeNsYw==}
+    engines: {node: '>=20.19.0'}
 
   '@tus/utils@0.6.0':
     resolution: {integrity: sha512-GpMpAQfVdC4UDhpsZrRPjGpdXg+JW5MquqMqtObUVsORwLBV6XI67iTT5be+z98THdqb6dl3bTLIElIdgPeo2g==}
     engines: {node: '>=20.19.0'}
+
+  '@types/cors@2.8.17':
+    resolution: {integrity: sha512-8CGDvrBj1zgo2qE+oS3pOCyYNqCPryMWY2bGfwA0dcfopWGgxs+78df0Rs3rc9THP4JkOhLsAa+15VdpAqkcUA==}
 
   '@types/node@20.17.30':
     resolution: {integrity: sha512-7zf4YyHA+jvBNfVrk2Gtvs6x7E8V+YDW05bNfG2XkWDJfYRXrTiP/DsB2zSYTaHX0bGIujTBQdMVAhb+j7mwpg==}
@@ -100,6 +105,13 @@ packages:
   cluster-key-slot@1.1.2:
     resolution: {integrity: sha512-RMr0FhtfXemyinomL4hrWcYJxmX6deFdCxpJzhDttxgO1+bcCnkk+9drydLVDmAMG7NE6aN/fl4F7ucU/90gAA==}
     engines: {node: '>=0.10.0'}
+
+  cookie-es@2.0.0:
+    resolution: {integrity: sha512-RAj4E421UYRgqokKUmotqAwuplYw15qtdXfY+hGzgCJ/MBjCVZcSoHK/kH9kocfjRjcDME7IiDWR/1WX1TM2Pg==}
+
+  cors@2.8.5:
+    resolution: {integrity: sha512-KIHbLJqu73RGr/hnbrO9uBeixNGuvSQjul/jdFvS/KFSIH1hWVd1ng7zOHx+YrEfInLG7q4n6GHQ9cDtxv/P6g==}
+    engines: {node: '>= 0.10'}
 
   create-require@1.1.1:
     resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
@@ -144,6 +156,10 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
+  object-assign@4.1.1:
+    resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
+    engines: {node: '>=0.10.0'}
+
   redis-errors@1.2.0:
     resolution: {integrity: sha512-1qny3OExCf0UvUV/5wpYKf2YwPcOqXzkwKKSmKHiE6ZMQs5heeE/c8eXK+PNllPvmjgAbfnsbpkGZWy8cBpn9w==}
     engines: {node: '>=4'}
@@ -151,6 +167,13 @@ packages:
   redis-parser@3.0.0:
     resolution: {integrity: sha512-DJnGAeenTdpMEH6uAJRK/uiyEIH9WVsUmoLwzudwGJUwZPp80PDBWPHXSAGNPwNvIXAbe7MSUB1zQFugFml66A==}
     engines: {node: '>=4'}
+
+  set-cookie-parser@2.7.1:
+    resolution: {integrity: sha512-IOc8uWeOZgnb3ptbCURJWNjWUPcO3ZnTTdzsurqERrP6nPyv+paC55vJM0LpOlT2ne+Ix+9+CRG1MNLlyZ4GjQ==}
+
+  srvx@0.2.8:
+    resolution: {integrity: sha512-9HG8eqhHLsvzhW4nJTg/4Sob1Sw/fB6S8Yzvf+iUD6l5CT4D0CXfPcFfh1r2eJFNHC0JOezK+YrgoufA5goYMQ==}
+    engines: {node: '>=20.11.1'}
 
   standard-as-callback@2.1.0:
     resolution: {integrity: sha512-qoRRSyROncaz1z0mvYqIE4lCd9p2R90i6GxW3uZv5ucSu8tU7B5HXUP1gG8pVZsYNVaXjk8ClXHPttLyxAL48A==}
@@ -183,6 +206,10 @@ packages:
 
   v8-compile-cache-lib@3.0.1:
     resolution: {integrity: sha512-wa7YjyUGfNZngI/vtK0UHAN+lgDCxBPCylVXGp0zu59Fz5aiGtNXaq3DhIov063MorB+VfufLh3JlF2KdTK3xg==}
+
+  vary@1.1.2:
+    resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
+    engines: {node: '>= 0.8'}
 
   yallist@4.0.0:
     resolution: {integrity: sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A==}
@@ -224,29 +251,33 @@ snapshots:
 
   '@tsconfig/node16@1.0.4': {}
 
-  '@tus/file-store@1.5.1':
+  '@tus/file-store@2.0.0':
     dependencies:
-      '@tus/utils': 0.5.1
+      '@tus/utils': 0.6.0
       debug: 4.4.0
     optionalDependencies:
       '@redis/client': 1.6.0
     transitivePeerDependencies:
       - supports-color
 
-  '@tus/server@1.10.2':
+  '@tus/server@2.1.0':
     dependencies:
-      '@tus/utils': 0.5.1
+      '@tus/utils': 0.6.0
       debug: 4.4.0
       lodash.throttle: 4.1.1
+      set-cookie-parser: 2.7.1
+      srvx: 0.2.8
     optionalDependencies:
       '@redis/client': 1.6.0
       ioredis: 5.6.1
     transitivePeerDependencies:
       - supports-color
 
-  '@tus/utils@0.5.1': {}
-
   '@tus/utils@0.6.0': {}
+
+  '@types/cors@2.8.17':
+    dependencies:
+      '@types/node': 20.17.30
 
   '@types/node@20.17.30':
     dependencies:
@@ -262,6 +293,13 @@ snapshots:
 
   cluster-key-slot@1.1.2:
     optional: true
+
+  cookie-es@2.0.0: {}
+
+  cors@2.8.5:
+    dependencies:
+      object-assign: 4.1.1
+      vary: 1.1.2
 
   create-require@1.1.1: {}
 
@@ -304,6 +342,8 @@ snapshots:
 
   ms@2.1.3: {}
 
+  object-assign@4.1.1: {}
+
   redis-errors@1.2.0:
     optional: true
 
@@ -311,6 +351,12 @@ snapshots:
     dependencies:
       redis-errors: 1.2.0
     optional: true
+
+  set-cookie-parser@2.7.1: {}
+
+  srvx@0.2.8:
+    dependencies:
+      cookie-es: 2.0.0
 
   standard-as-callback@2.1.0:
     optional: true
@@ -340,6 +386,8 @@ snapshots:
   uuid@11.1.0: {}
 
   v8-compile-cache-lib@3.0.1: {}
+
+  vary@1.1.2: {}
 
   yallist@4.0.0:
     optional: true

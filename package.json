@@ -19,12 +19,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@tus/file-store": "^1.5.1",
-    "@tus/server": "^1.10.2",
+    "@tus/file-store": "^2.0.0",
+    "@tus/server": "^2.1.0",
     "@tus/utils": "^0.6.0",
+    "cors": "^2.8.5",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
     "@types/node": "^20.17.30",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
