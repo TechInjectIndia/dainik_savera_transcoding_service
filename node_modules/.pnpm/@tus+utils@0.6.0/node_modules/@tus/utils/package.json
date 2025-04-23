@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@tus/utils",
+  "version": "0.6.0",
+  "description": "Internal utils for tus Node.js server and stores",
+  "main": "./dist/index.js",
+  "exports": "./dist/index.js",
+  "type": "module",
+  "homepage": "https://github.com/tus/tus-node-server#readme",
+  "bugs": "https://github.com/tus/tus-node-server/issues",
+  "repository": "tus/tus-node-server",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src",
+    "!test*"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "pretest": "tsc --build",
+    "test": "mocha './dist/test/*.js' --exit"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^22.13.7",
+    "ioredis": "^5.4.1",
+    "mocha": "^11.0.1",
+    "should": "^13.2.3"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
