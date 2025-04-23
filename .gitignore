@@ -1,2 +1,6 @@
 .idea
 uploads
+node_modules
+dist/*
+/dist
+dist
