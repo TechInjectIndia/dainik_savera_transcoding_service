@@ -1,6 +1,6 @@
 import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from 'node:fs'; // Ensure fs.promises is available
+import path from 'node:path'; // Ensure path is available
 import { Buffer } from 'node:buffer';
 import cors from 'cors'; // Import the cors middleware
 
@@ -11,49 +11,23 @@ import { FileStore } from '@tus/file-store';
 
 // --- CORS Configuration (using middleware options) ---
 const ALLOWED_ORIGIN = 'http://localhost:5173'; // Origin of your Svelte app
-
-// Headers required by the tus protocol that the client needs access to
 const TUS_EXPOSED_HEADERS = [
-	'Upload-Offset',
-	'Upload-Length',
-	'Tus-Version',
-	'Tus-Resumable',
-	'Tus-Max-Size',
-	'Tus-Extension',
-	'Location', // Important for retrieving the upload URL
-	'Upload-Metadata', // Expose if client needs to read it back
-]; // Note: No .join(', ') needed for the cors package options
-
-// Headers the client is allowed to send
+	'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable',
+	'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata',
+];
 const TUS_ALLOWED_HEADERS = [
-	'Authorization', // If you use authentication
-	'Content-Type',
-	'Tus-Resumable',
-	'Upload-Length',
-	'Upload-Metadata',
-	'Upload-Offset',
-	'X-HTTP-Method-Override', // Used by some clients for PATCH/DELETE over POST
-	'X-Requested-With',
-]; // Note: No .join(', ') needed for the cors package options
+	'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length',
+	'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With',
+];
+const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
 
-const TUS_ALLOWED_METHODS = [
-	'POST', // Create an upload
-	'PATCH', // Upload chunks
-	'HEAD', // Check upload status
-	'DELETE', // Terminate an upload
-	'OPTIONS', // CORS preflight
-]; // Note: No .join(', ') needed for the cors package options
-
-// Configure the cors middleware
 const corsOptions: cors.CorsOptions = {
-	origin: ALLOWED_ORIGIN, // Allow only your Svelte app's origin
+	origin: ALLOWED_ORIGIN,
 	methods: TUS_ALLOWED_METHODS,
 	allowedHeaders: TUS_ALLOWED_HEADERS,
 	exposedHeaders: TUS_EXPOSED_HEADERS,
-	optionsSuccessStatus: 204 // Use 204 No Content for preflight success
+	optionsSuccessStatus: 204
 };
-
-// Create a cors middleware instance
 const corsMiddleware = cors(corsOptions);
 
 
@@ -61,7 +35,8 @@ const corsMiddleware = cors(corsOptions);
 function parseMetadata(metadataHeader: string | undefined | null): Record<string, string> {
 	const metadata: Record<string, string> = {};
 	if (!metadataHeader) { return metadata; }
-	metadataHeader.split(',').forEach((pair) => {
+	// Ensure metadataHeader is treated as string before calling split
+	String(metadataHeader).split(',').forEach((pair) => {
 		const kv = pair.trim().split(' ');
 		if (kv.length === 2) {
 			const key = kv[0];
@@ -78,10 +53,33 @@ function parseMetadata(metadataHeader: string | undefined | null): Record<string
 	return metadata;
 }
 
+// --- Helper: Sanitize Filename (Re-introduced) ---
+function sanitizeFilename(filename: string | undefined | null): string {
+	console.log(`[Sanitize] Input filename: ${filename}`); // Log input
+	if (!filename) {
+		console.log(`[Sanitize] Input is null or empty, returning empty string.`);
+		return '';
+	}
+	// Decode URI components first in case they exist
+	let name = decodeURIComponent(filename);
+	// Whitelist common safe characters: letters, numbers, hyphen, underscore, period
+	// Replace others (including space) with underscore
+	name = name.replace(/[^a-zA-Z0-9\.\-\_]/g, '_');
+	// Prevent directory traversal and clean up leading/trailing/multiple dots/underscores
+	name = name.replace(/^\.+|^\_+|\.+$/g, '').replace(/\.{2,}/g, '_').replace(/\_{2,}/g, '_');
+	// Handle empty result after sanitization
+	if (!name || name === '.' || name === '_') {
+		console.log(`[Sanitize] Result became empty after sanitization, returning empty string.`);
+		return '';
+	}
+	console.log(`[Sanitize] Output filename: ${name}`); // Log output
+	return name;
+}
+
 // --- Configuration ---
 const port = 8085;
 const hostname = 'localhost';
-const tusPath = '/files/';
+const tusPath = '/files/'; // Should end with a slash
 const uploadDir = './uploads';
 
 // --- Ensure Upload Directory Exists ---
@@ -108,23 +106,89 @@ const tusServer = new Server({
 });
 
 // --- Event Handling ---
+// Interface might not fully match the actual event in v2.1.0 for POST_FINISH
 interface TusFile { id: string; size: number; offset: number; metadata: Record<string, string>; creation_date?: string; }
-interface TusEvent { file: TusFile; req?: http.IncomingMessage; res?: http.ServerResponse }
+interface TusEvent {
+	file?: TusFile; // Keep optional as it seems missing in POST_FINISH
+	// Properties observed in the log for POST_FINISH event:
+	method?: string;
+	url?: string;
+	headers?: http.IncomingHttpHeaders;
+	// Add req/res as optional if they might appear in other events
+	req?: http.IncomingMessage;
+	res?: http.ServerResponse;
+}
 
-tusServer.on(EVENTS.POST_FINISH, (event: TusEvent) => {
-	const resState = event.res ? `headersSent=${event.res.headersSent}, writableEnded=${event.res.writableEnded}` : 'Response object not available';
-	console.log(`[EVENT:POST_FINISH] ✅ Upload complete for ID: ${event.file.id}. Response state: ${resState}`);
-	console.log(`   ID: ${event.file.id}`);
-	console.log(`   Size: ${event.file.size} bytes`);
-	console.log(`   Offset: ${event.file.offset}`);
-	console.log(`   Metadata:`, event.file.metadata);
-	const originalFilename = event.file.metadata?.name;
-	if (originalFilename) { console.log(`   Original filename from metadata: ${originalFilename}`); }
-	const filePath = path.join(absoluteUploadDir, event.file.id);
-	console.log(`   File likely stored at: ${filePath}`);
+// --- Modified POST_FINISH Handler ---
+tusServer.on(EVENTS.POST_FINISH, async (event: TusEvent) => { // Make handler async
+	console.log(`[EVENT:POST_FINISH] Handler invoked.`);
+	console.log(`[EVENT:POST_FINISH] Received event object:`, event); // Log the raw event
+
+	// --- Extract info from event (assuming it contains request details) ---
+	const requestUrl = event.url;
+	const requestHeaders = event.headers;
+
+	if (!requestUrl) {
+		console.error(`[EVENT:POST_FINISH] Error: Could not determine upload URL from event.`);
+		return;
+	}
+
+	// Extract uploadId from the URL (e.g., /files/uploadId)
+	// Assumes tusPath ends with a slash
+	const urlParts = requestUrl.split(tusPath);
+	const uploadId = urlParts[1]; // Get the part after /files/
+
+	if (!uploadId) {
+		console.error(`[EVENT:POST_FINISH] Error: Could not parse upload ID from URL: ${requestUrl}`);
+		return;
+	}
+
+	console.log(`[EVENT:POST_FINISH] ✅ Upload complete for ID (from URL): ${uploadId}.`);
+
+	// --- Attempt to get original filename from headers ---
+	const metadata = parseMetadata(requestHeaders?.['upload-metadata'] as string | undefined);
+	const originalFilename = metadata?.name; // Uppy sends 'name'
+	console.log(`[Rename] Extracted originalFilename from metadata header: ${originalFilename}`);
+
+	if (originalFilename) {
+		const sanitizedFilename = sanitizeFilename(originalFilename);
+
+		if (sanitizedFilename) {
+			const currentPath = path.join(absoluteUploadDir, uploadId);
+			// Construct new name: Use ID prefix to prevent collisions
+			const newFilename = `${uploadId}-${sanitizedFilename}`;
+			const newPath = path.join(absoluteUploadDir, newFilename);
+
+			console.log(`[Rename] Current path: ${currentPath}`);
+			console.log(`[Rename] New path: ${newPath}`);
+
+			try {
+				console.log(`[Rename] Checking existence of source file: ${currentPath}`);
+				await fs.promises.access(currentPath, fs.constants.F_OK);
+				console.log(`[Rename] Source file exists. Attempting rename...`);
+				await fs.promises.rename(currentPath, newPath);
+				console.log(`[Rename] Successfully renamed file to: ${newFilename}`);
+			} catch (renameError: any) {
+				console.error(`[Rename] Error during rename process:`, renameError);
+				if (renameError.code === 'ENOENT') {
+					console.error(`[Rename] Detail: Source file not found at ${currentPath}. Was it already moved or deleted?`);
+				}
+			}
+		} else {
+			console.warn(`[Rename] Original filename "${originalFilename}" sanitized to an empty string. File will not be renamed.`);
+		}
+	} else {
+		console.log(`[Rename] No original filename (key 'name') found in metadata header. File will not be renamed.`);
+	}
 });
 
 tusServer.on(EVENTS.POST_TERMINATE, (event: TusEvent) => {
+	// Add safety check here too
+	if (!event || !event.file) { // Keep check here as POST_TERMINATE might pass file
+		console.error(`[EVENT:POST_TERMINATE] Error: Received POST_TERMINATE event but 'event.file' is missing or undefined.`);
+		console.error(`[EVENT:POST_TERMINATE] Received event object:`, event);
+		return;
+	}
 	const resState = event.res ? `headersSent=${event.res.headersSent}, writableEnded=${event.res.writableEnded}` : 'Response object not available';
 	console.error(`[EVENT:POST_TERMINATE] ⛔ Upload terminated unexpectedly for ID: ${event.file.id}. Response state: ${resState}`);
 });
@@ -141,17 +205,15 @@ const httpServer = http.createServer((req, res) => {
 	const reqStartTime = Date.now();
 	const reqUrl = req.url ?? '';
 	const reqMethod = req.method;
-	console.log(`[Request START] ${reqMethod} ${reqUrl}`);
-	console.log(`[Request START] Initial res state: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
+	// Only log start for non-OPTIONS requests to reduce noise
+	if (reqMethod !== 'OPTIONS') {
+		console.log(`[Request START] ${reqMethod} ${reqUrl}`);
+		console.log(`[Request START] Initial res state: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
+	}
 
 	// --- Apply CORS Middleware ---
-	// The cors middleware handles setting headers and responding to OPTIONS requests.
-	// It calls the 'next' function (the third argument here) if the request
-	// is allowed and not an OPTIONS request that it handled.
 	corsMiddleware(req, res, (err?: any) => {
-		// This callback function acts as our 'next' handler after CORS checks.
 		if (err) {
-			// Handle errors from the CORS middleware itself (e.g., configuration error)
 			console.error("[CORS Middleware Error]", err);
 			if (!res.headersSent) {
 				res.writeHead(500, { "Content-Type": "text/plain" });
@@ -162,31 +224,36 @@ const httpServer = http.createServer((req, res) => {
 			return;
 		}
 
-		// --- CORS check passed, proceed with routing ---
-		console.log(`[Request CORS] CORS middleware passed. State after CORS: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
+		// Log after CORS only for non-OPTIONS
+		if (reqMethod !== 'OPTIONS') {
+			console.log(`[Request CORS] CORS middleware passed. State after CORS: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
+		}
 
 		// --- Route Requests ---
-
-		// Let tus-server handle requests for the tus path
 		if (reqUrl.startsWith(tusPath)) {
-			console.log(`[Request TUS] Routing to tusServer.handle for ${reqMethod} ${reqUrl}. State before handle: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
-			res.once('finish', () => {
-				console.log(`[Request TUS] Response 'finish' event fired for ${reqMethod} ${reqUrl}. State: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}. Duration: ${Date.now() - reqStartTime}ms`);
-			});
-			res.once('close', () => {
-				console.log(`[Request TUS] Response 'close' event fired for ${reqMethod} ${reqUrl}. State: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}. Duration: ${Date.now() - reqStartTime}ms`);
-			});
+			// Log before handle only for non-OPTIONS
+			if (reqMethod !== 'OPTIONS') {
+				console.log(`[Request TUS] Routing to tusServer.handle for ${reqMethod} ${reqUrl}. State before handle: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
+				res.once('finish', () => {
+					console.log(`[Request TUS] Response 'finish' event fired for ${reqMethod} ${reqUrl}. State: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}. Duration: ${Date.now() - reqStartTime}ms`);
+				});
+				res.once('close', () => {
+					console.log(`[Request TUS] Response 'close' event fired for ${reqMethod} ${reqUrl}. State: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}. Duration: ${Date.now() - reqStartTime}ms`);
+				});
+			}
 
 			tusServer.handle(req, res);
-			console.log(`[Request TUS] After calling tusServer.handle for ${reqMethod} ${reqUrl}. State: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
-			// Return is important here because tusServer.handle manages the response asynchronously
+
+			// Log after handle only for non-OPTIONS
+			if (reqMethod !== 'OPTIONS') {
+				console.log(`[Request TUS] After calling tusServer.handle for ${reqMethod} ${reqUrl}. State: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
+			}
 			return;
 		}
 
 		// --- Handle Other Non-Tus Routes ---
 		if (reqUrl === '/') {
 			console.log(`[Request Root] Handling GET /`);
-			// CORS headers were already handled by the middleware
 			res.writeHead(200, { 'Content-Type': 'text/plain' });
 			res.end(`Welcome! Tus endpoint is at ${tusPath}`);
 			console.log(`[Request Root] Ended GET / response. State: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}. Duration: ${Date.now() - reqStartTime}ms`);
@@ -196,7 +263,6 @@ const httpServer = http.createServer((req, res) => {
 		// Default 404 for any other route
 		console.log(`[Request 404] No route matched for ${reqMethod} ${reqUrl}. State before 404: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}`);
 		if (!res.headersSent) {
-			// CORS headers were already handled by the middleware
 			res.writeHead(404, { 'Content-Type': 'text/plain' });
 			res.end('Not Found');
 			console.log(`[Request 404] Ended 404 response. State: headersSent=${res.headersSent}, writableEnded=${res.writableEnded}. Duration: ${Date.now() - reqStartTime}ms`);
@@ -206,9 +272,7 @@ const httpServer = http.createServer((req, res) => {
 		} else {
 			console.log(`[Request 404] Headers sent and response ended. Cannot send 404.`);
 		}
-		// End of routing within the CORS callback
 	}); // End of corsMiddleware call
-
 }); // End of http.createServer
 
 // --- Start Listening ---
@@ -216,7 +280,8 @@ httpServer.listen(port, hostname, () => {
 	console.log(`🚀 tus server (ESM) listening at http://${hostname}:${port}${tusPath}`);
 	console.warn(`⚠️ Warning: Server is running without a file locker.`);
 	console.info(`ℹ️  Using default server-generated upload IDs.`);
-	console.info(`✅ CORS enabled via middleware for origin: ${ALLOWED_ORIGIN}`); // Updated info message
+	console.info(`✅ CORS enabled via middleware for origin: ${ALLOWED_ORIGIN}`);
+	console.info(`📝 Files will be renamed on completion using 'id-sanitizedOriginalName' format.`);
 });
 
 // --- Graceful Shutdown ---
