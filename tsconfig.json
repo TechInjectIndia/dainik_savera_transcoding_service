@@ -4,11 +4,10 @@
     // Target modern ECMAScript version
     "target": "ES2022",
     // Set module system to ESNext or similar ES module format
-    "module": "ESNext", // Or ES2020, ES2022, NodeNext
+    "module": "Node18", // Or ES2020, ES2022, NodeNext
     // Specify Node.js module resolution strategy for ESM
     "moduleResolution": "NodeNext", // Or Bundler, Node16
     "outDir": "./dist",
-    "rootDir": "./src",
 
     "strict": true,
     // Allows importing CommonJS modules with default imports
@@ -24,6 +23,4 @@
     // If using NodeNext module resolution, you might need this
     // "allowSyntheticDefaultImports": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "**/*.spec.ts"]
 }
