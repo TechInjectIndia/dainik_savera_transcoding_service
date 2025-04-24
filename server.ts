@@ -23,8 +23,8 @@ enum UploadStatus {
 // --- Database Configuration ---
 // Using placeholder values - REMEMBER TO REPLACE with your actual credentials
 const DB_NAME = 'dainik_savera'; // Your DB name
-const DB_USER = 'postgres'; // Your DB user
-const DB_PASS = 'postgres'; // Your DB password - Use env vars in production!
+const DB_USER = 'tongue'; // Your DB user
+const DB_PASS = '123456'; // Your DB password - Use env vars in production!
 const DB_HOST = 'localhost';
 const DB_PORT = 5432;
 
