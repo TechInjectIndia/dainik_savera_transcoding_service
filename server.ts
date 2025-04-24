@@ -156,14 +156,14 @@ const TUS_EXPOSED_HEADERS = [
 	'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable',
 	'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata'
   ];
-  
+
   const TUS_ALLOWED_HEADERS = [
 	'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length',
 	'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With'
   ];
-  
+
   const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
-  
+
   const corsOptions: cors.CorsOptions = {
 	origin: true, // <-- allows all origins
 	methods: TUS_ALLOWED_METHODS,
@@ -260,6 +260,7 @@ const customFileStore = new FileStoreWithDbMetadata({ directory: absoluteUploadD
 const tusServer = new Server({
 	path: tusPath,
 	datastore: customFileStore, // Use the custom datastore
+	respectForwardedHeaders: true,
 });
 
 // --- Event Handling ---
@@ -316,7 +317,7 @@ tusServer.on(EVENTS.POST_FINISH, async (event: TusEvent) => {
 					await fs.promises.rename(currentPath, newPath);
 					console.log(`[Rename] Successfully renamed file to: ${newFilename}`);
 					success = true; // Mark as success
-					
+
 				} catch (renameError: any) {
 					console.error(`[Rename] Error during rename process:`, renameError);
 					renameAttemptError = renameError; // Store the error
