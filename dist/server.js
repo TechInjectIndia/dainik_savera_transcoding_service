@@ -10,11 +10,18 @@ import { Server } from '@tus/server';
 // Assuming EVENTS import from @tus/utils works, otherwise adjust as needed
 import { EVENTS } from '@tus/utils';
 import { FileStore } from '@tus/file-store'; // Import the base store
+// --- Define Upload Status Enum ---
+var UploadStatus;
+(function (UploadStatus) {
+    UploadStatus["UPLOADED"] = "UPLOADED";
+    UploadStatus["RENAMED"] = "RENAMED";
+    UploadStatus["RENAME_FAILED"] = "RENAME_FAILED"; // Renaming attempt failed
+})(UploadStatus || (UploadStatus = {}));
 // --- Database Configuration ---
 // Using placeholder values - REMEMBER TO REPLACE with your actual credentials
 const DB_NAME = 'dainik_savera'; // Your DB name
-const DB_USER = 'postgres'; // Your DB user
-const DB_PASS = 'postgres'; // Your DB password - Use env vars in production!
+const DB_USER = 'tongue'; // Your DB user
+const DB_PASS = '123456'; // Your DB password - Use env vars in production!
 const DB_HOST = 'localhost';
 const DB_PORT = 5432;
 // --- Initialize Sequelize ---
@@ -27,19 +34,41 @@ const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
     //todo sunil
     // pool: false, // Disable pooling for simplicity
 });
-// --- End Update ---
+// --- Updated UploadModel Class Definition ---
+// Use 'declare' for all attributes managed by Sequelize to avoid shadowing warnings
 class UploadModel extends Model {
 }
+// --- End Update ---
 UploadModel.init({
     uploadId: { type: DataTypes.STRING, primaryKey: true, allowNull: false },
     originalFilename: { type: DataTypes.STRING, allowNull: false },
-    // Sequelize automatically adds createdAt and updatedAt columns
+    status: {
+        type: DataTypes.ENUM(...Object.values(UploadStatus)),
+        allowNull: false, // DB constraint
+        defaultValue: UploadStatus.UPLOADED,
+    },
+    renamedFilename: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    renameError: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    // Explicitly define timestamps columns for clarity (optional)
+    // createdAt: {
+    //   type: DataTypes.DATE,
+    //   allowNull: false, // Default behavior
+    // },
+    // updatedAt: {
+    //   type: DataTypes.DATE,
+    //   allowNull: false, // Default behavior
+    // }
 }, {
     sequelize,
     modelName: 'Upload', // Keep model name simple
     tableName: 'uploads_metadata',
-    // timestamps: true is the default, explicitly stating it is also fine
-    timestamps: true,
+    timestamps: true, // Ensure timestamps are enabled (default is true)
 });
 // --- Server Configuration ---
 const port = 8085;
@@ -72,6 +101,7 @@ async function initializeApp() {
         await sequelize.authenticate();
         console.log('[Sequelize] Connection has been established successfully.');
         console.log('[Init] Synchronizing Sequelize models...');
+        // Use { alter: true } cautiously in production, consider migrations
         await sequelize.sync({ alter: true });
         console.log('[Sequelize] All models were synchronized successfully.');
         console.log('[Init] Starting HTTP server...');
@@ -85,11 +115,34 @@ async function initializeApp() {
     }
 }
 // --- CORS Configuration ---
-const ALLOWED_ORIGIN = 'http://localhost:5173';
-const TUS_EXPOSED_HEADERS = ['Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata'];
-const TUS_ALLOWED_HEADERS = ['Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With'];
+const ALLOWED_ORIGIN = ['http://localhost:5173', 'https://tus.tonguetingler.com'];
+// const TUS_EXPOSED_HEADERS = [ 'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata' ];
+// const TUS_ALLOWED_HEADERS = [ 'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With' ];
+// const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
+// const corsOptions: cors.CorsOptions = { origin: (origin, callback) => {
+// 	console.log('origin: ', origin);
+//     // Allow requests with no origin (like mobile apps or curl)
+//     if (!origin) return callback(null, true);
+//     if (ALLOWED_ORIGIN.includes(origin)) return callback(null, true);
+//     return callback(new Error("CORS policy: Not allowed by CORS"));
+//   },
+// 	methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
+const TUS_EXPOSED_HEADERS = [
+    'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable',
+    'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata'
+];
+const TUS_ALLOWED_HEADERS = [
+    'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length',
+    'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With'
+];
 const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
-const corsOptions = { origin: ALLOWED_ORIGIN, methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
+const corsOptions = {
+    origin: true, // <-- allows all origins
+    methods: TUS_ALLOWED_METHODS,
+    allowedHeaders: TUS_ALLOWED_HEADERS,
+    exposedHeaders: TUS_EXPOSED_HEADERS,
+    optionsSuccessStatus: 204
+};
 const corsMiddleware = cors(corsOptions);
 // --- Helpers ---
 function parseMetadata(metadataHeader) {
@@ -143,11 +196,19 @@ class FileStoreWithDbMetadata extends FileStore {
         try {
             transaction = await sequelize.transaction();
             if (uploadId && originalFilename) {
+                // --- Set initial status when creating ---
                 const [record, created] = await UploadModel.findOrCreate({
                     where: { uploadId: uploadId },
-                    defaults: { uploadId: uploadId, originalFilename: originalFilename },
+                    defaults: {
+                        uploadId: uploadId,
+                        originalFilename: originalFilename,
+                        status: UploadStatus.UPLOADED, // Set initial status
+                        renamedFilename: null,
+                        renameError: null,
+                    },
                     transaction: transaction
                 });
+                // --- End set initial status ---
                 if (created) {
                     console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`);
                 }
@@ -190,7 +251,7 @@ const tusServer = new Server({
     datastore: customFileStore, // Use the custom datastore
 });
 // --- REMOVED POST_CREATE Handler (Logic moved to DataStore) ---
-// --- Modified POST_FINISH Handler (Removed DB cleanup) ---
+// --- Modified POST_FINISH Handler (Update status, removed DB cleanup) ---
 tusServer.on(EVENTS.POST_FINISH, async (event) => {
     console.log(`[EVENT:POST_FINISH] Handler invoked.`);
     const requestUrl = event.url;
@@ -209,10 +270,13 @@ tusServer.on(EVENTS.POST_FINISH, async (event) => {
     }
     console.log(`[EVENT:POST_FINISH] ✅ Upload complete for ID (cleaned): ${uploadId}.`);
     let uploadRecord = null;
+    let originalFilename;
+    let renameAttemptError = null; // Store potential rename error
+    let success = false; // Flag to track if rename was attempted and succeeded
+    let newFilename = null; // Store the new filename if successful
     try {
         console.log(`[Rename] Looking up metadata in DB for ID ${uploadId}...`);
         uploadRecord = await UploadModel.findByPk(uploadId);
-        let originalFilename;
         if (uploadRecord) {
             const recordData = uploadRecord.get({ plain: true });
             console.log(`[Rename] Found record dataValues:`, recordData);
@@ -226,7 +290,7 @@ tusServer.on(EVENTS.POST_FINISH, async (event) => {
             const sanitizedFilename = sanitizeFilename(originalFilename);
             if (sanitizedFilename) {
                 const currentPath = path.join(absoluteUploadDir, uploadId);
-                const newFilename = `${uploadId}-${sanitizedFilename}`;
+                newFilename = `${uploadId}-${sanitizedFilename}`; // Assign potential new name
                 const newPath = path.join(absoluteUploadDir, newFilename);
                 console.log(`[Rename] Current path: ${currentPath}`);
                 console.log(`[Rename] New path: ${newPath}`);
@@ -236,9 +300,11 @@ tusServer.on(EVENTS.POST_FINISH, async (event) => {
                     console.log(`[Rename] Exists. Attempting rename...`);
                     await fs.promises.rename(currentPath, newPath);
                     console.log(`[Rename] Successfully renamed file to: ${newFilename}`);
+                    success = true; // Mark as success
                 }
                 catch (renameError) {
-                    console.error(`[Rename] Error during rename process:`, renameError); /* Don't return here, allow finally block */
+                    console.error(`[Rename] Error during rename process:`, renameError);
+                    renameAttemptError = renameError; // Store the error
                 }
             }
             else {
@@ -252,11 +318,41 @@ tusServer.on(EVENTS.POST_FINISH, async (event) => {
     catch (dbError) {
         console.error(`[Rename] Error querying DB for ID ${uploadId}:`, dbError);
     }
-    finally {
-        // --- REMOVED DB Cleanup from finally block ---
-        console.log(`[Rename][Finally] Finished processing POST_FINISH for ID ${uploadId}. DB record NOT deleted here.`);
-        // --- End Removal ---
+    // --- Update DB Status After Rename Attempt ---
+    if (uploadRecord) {
+        try {
+            if (success && newFilename) {
+                await uploadRecord.update({
+                    status: UploadStatus.RENAMED,
+                    renamedFilename: newFilename,
+                    renameError: null // Clear any previous error
+                });
+                console.log(`[Rename] Updated DB status to RENAMED for ID ${uploadId}`);
+            }
+            else if (originalFilename) { // Only mark failed if rename was actually attempted
+                // Use the stored error message or a generic one
+                const errorMessage = renameAttemptError instanceof Error ? renameAttemptError.message : `Rename failed at ${new Date().toISOString()}`;
+                await uploadRecord.update({
+                    status: UploadStatus.RENAME_FAILED,
+                    renameError: errorMessage.substring(0, 1024) // Limit error message length if needed
+                });
+                console.log(`[Rename] Updated DB status to RENAME_FAILED for ID ${uploadId}`);
+            }
+            else {
+                console.log(`[Rename] No rename attempted, DB status remains UPLOADED for ID ${uploadId}`);
+            }
+        }
+        catch (updateError) {
+            console.error(`[Rename] Error updating DB status for ID ${uploadId}:`, updateError);
+        }
     }
+    else {
+        console.warn(`[Rename] Cannot update DB status, record for ID ${uploadId} was not found.`);
+    }
+    // --- End DB Status Update ---
+    // --- REMOVED DB Cleanup from finally block ---
+    console.log(`[Rename][Finally] Finished processing POST_FINISH for ID ${uploadId}. DB record NOT deleted here.`);
+    // --- End Removal ---
 });
 // --- Modified POST_TERMINATE Handler (Removed DB cleanup) ---
 tusServer.on(EVENTS.POST_TERMINATE, async (event) => {
@@ -339,13 +435,13 @@ function scheduleDatabaseCleanup() {
         console.log('[Cron Cleanup] Running scheduled job to delete old upload metadata...');
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         try {
+            // Delete records older than 24 hours, regardless of status
+            // (or add specific status checks if needed, e.g., only delete RENAMED or RENAME_FAILED)
             const deletedCount = await UploadModel.destroy({
                 where: {
-                    // --- Use the correct column name 'createdAt' ---
                     createdAt: {
                         [Op.lt]: twentyFourHoursAgo // Op.lt means "less than"
                     }
-                    // --- End fix ---
                 }
             });
             console.log(`[Cron Cleanup] Deleted ${deletedCount} old metadata records.`);
