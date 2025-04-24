@@ -1,26 +1,24 @@
-// tsconfig.json
 {
   "compilerOptions": {
-    // Target modern ECMAScript version
     "target": "ES2022",
-    // Set module system to ESNext or similar ES module format
-    "module": "Node18", // Or ES2020, ES2022, NodeNext
-    // Specify Node.js module resolution strategy for ESM
-    "moduleResolution": "NodeNext", // Or Bundler, Node16
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "./dist",
-
+    // "rootDir": "./src", // Removed rootDir as server.ts is in the project root
     "strict": true,
-    // Allows importing CommonJS modules with default imports
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-
-    // Important for source map generation if needed
-    // "sourceMap": true,
-    // Important for top-level await if used (not needed here)
-    // "lib": ["ES2022"],
-
-    // If using NodeNext module resolution, you might need this
-    // "allowSyntheticDefaultImports": true
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true
+    // "sourceMap": true, // Optional: uncomment for easier debugging
   },
+  // Include only the server.ts file (adjust if you have other .ts files)
+  "include": ["server.ts"],
+  "exclude": [
+    "node_modules",
+    "**/*.spec.ts",
+    "dist",
+    "uploads"
+  ]
 }
