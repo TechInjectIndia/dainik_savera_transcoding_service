@@ -290,6 +290,7 @@ tusServer.on(EVENTS.POST_FINISH, async (event: TusEvent) => {
 					await fs.promises.rename(currentPath, newPath);
 					console.log(`[Rename] Successfully renamed file to: ${newFilename}`);
 					success = true; // Mark as success
+					
 				} catch (renameError: any) {
 					console.error(`[Rename] Error during rename process:`, renameError);
 					renameAttemptError = renameError; // Store the error
