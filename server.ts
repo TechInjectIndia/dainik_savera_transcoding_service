@@ -141,17 +141,36 @@ async function initializeApp() {
 
 // --- CORS Configuration ---
 const ALLOWED_ORIGIN = ['http://localhost:5173', 'https://tus.tonguetingler.com'];
-const TUS_EXPOSED_HEADERS = [ 'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata' ];
-const TUS_ALLOWED_HEADERS = [ 'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With' ];
-const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
-const corsOptions: cors.CorsOptions = { origin: (origin, callback) => {
-	console.log('origin: ', origin);
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGIN.includes(origin)) return callback(null, true);
-    return callback(new Error("CORS policy: Not allowed by CORS"));
-  },
-	methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
+// const TUS_EXPOSED_HEADERS = [ 'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata' ];
+// const TUS_ALLOWED_HEADERS = [ 'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With' ];
+// const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
+// const corsOptions: cors.CorsOptions = { origin: (origin, callback) => {
+// 	console.log('origin: ', origin);
+//     // Allow requests with no origin (like mobile apps or curl)
+//     if (!origin) return callback(null, true);
+//     if (ALLOWED_ORIGIN.includes(origin)) return callback(null, true);
+//     return callback(new Error("CORS policy: Not allowed by CORS"));
+//   },
+// 	methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
+const TUS_EXPOSED_HEADERS = [
+	'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable',
+	'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata'
+  ];
+  
+  const TUS_ALLOWED_HEADERS = [
+	'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length',
+	'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With'
+  ];
+  
+  const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
+  
+  const corsOptions: cors.CorsOptions = {
+	origin: true, // <-- allows all origins
+	methods: TUS_ALLOWED_METHODS,
+	allowedHeaders: TUS_ALLOWED_HEADERS,
+	exposedHeaders: TUS_EXPOSED_HEADERS,
+	optionsSuccessStatus: 204
+  };
 const corsMiddleware = cors(corsOptions);
 
 // --- Helpers ---
