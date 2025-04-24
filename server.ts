@@ -23,8 +23,8 @@ enum UploadStatus {
 // --- Database Configuration ---
 // Using placeholder values - REMEMBER TO REPLACE with your actual credentials
 const DB_NAME = 'dainik_savera'; // Your DB name
-const DB_USER = 'sumeet'; // Your DB user
-const DB_PASS = 'root'; // Your DB password - Use env vars in production!
+const DB_USER = 'tongue'; // Your DB user
+const DB_PASS = '123456'; // Your DB password - Use env vars in production!
 const DB_HOST = 'localhost';
 const DB_PORT = 5432;
 
@@ -34,7 +34,7 @@ const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
 	port: DB_PORT,
 	dialect: 'postgres',
 	dialectModule: pg, // Explicitly provide the imported pg module
-	logging: (msg) => console.log('[Sequelize]', msg), // Log Sequelize queries (optional)
+	logging: (msg:any) => console.log('[Sequelize]', msg), // Log Sequelize queries (optional)
 	//todo sunil
 	// pool: false, // Disable pooling for simplicity
 });
@@ -140,11 +140,37 @@ async function initializeApp() {
 }
 
 // --- CORS Configuration ---
-const ALLOWED_ORIGIN = 'http://localhost:5173';
-const TUS_EXPOSED_HEADERS = [ 'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata' ];
-const TUS_ALLOWED_HEADERS = [ 'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With' ];
-const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
-const corsOptions: cors.CorsOptions = { origin: ALLOWED_ORIGIN, methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
+const ALLOWED_ORIGIN = ['http://localhost:5173', 'https://tus.tonguetingler.com'];
+// const TUS_EXPOSED_HEADERS = [ 'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata' ];
+// const TUS_ALLOWED_HEADERS = [ 'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With' ];
+// const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
+// const corsOptions: cors.CorsOptions = { origin: (origin, callback) => {
+// 	console.log('origin: ', origin);
+//     // Allow requests with no origin (like mobile apps or curl)
+//     if (!origin) return callback(null, true);
+//     if (ALLOWED_ORIGIN.includes(origin)) return callback(null, true);
+//     return callback(new Error("CORS policy: Not allowed by CORS"));
+//   },
+// 	methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
+const TUS_EXPOSED_HEADERS = [
+	'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable',
+	'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata'
+  ];
+  
+  const TUS_ALLOWED_HEADERS = [
+	'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length',
+	'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With'
+  ];
+  
+  const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
+  
+  const corsOptions: cors.CorsOptions = {
+	origin: true, // <-- allows all origins
+	methods: TUS_ALLOWED_METHODS,
+	allowedHeaders: TUS_ALLOWED_HEADERS,
+	exposedHeaders: TUS_EXPOSED_HEADERS,
+	optionsSuccessStatus: 204
+  };
 const corsMiddleware = cors(corsOptions);
 
 // --- Helpers ---
@@ -290,6 +316,7 @@ tusServer.on(EVENTS.POST_FINISH, async (event: TusEvent) => {
 					await fs.promises.rename(currentPath, newPath);
 					console.log(`[Rename] Successfully renamed file to: ${newFilename}`);
 					success = true; // Mark as success
+					
 				} catch (renameError: any) {
 					console.error(`[Rename] Error during rename process:`, renameError);
 					renameAttemptError = renameError; // Store the error
