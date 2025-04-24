@@ -1,30 +1,103 @@
 import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from 'node:fs'; // Ensure fs.promises is available
+import path from 'node:path'; // Ensure path is available
 import { Buffer } from 'node:buffer';
-import { v4 as uuidv4 } from 'uuid';
+import cors from 'cors'; // Import the cors middleware
+import { Sequelize, DataTypes, Model, Op } from 'sequelize'; // Import Sequelize, Op
+import pg from 'pg'; // Import the pg driver directly
+import cron from 'node-cron'; // Import node-cron
 import { Server } from '@tus/server';
 // Assuming EVENTS import from @tus/utils works, otherwise adjust as needed
 import { EVENTS } from '@tus/utils';
-import { FileStore } from '@tus/file-store';
+import { FileStore } from '@tus/file-store'; // Import the base store
+// --- Database Configuration ---
+// Using placeholder values - REMEMBER TO REPLACE with your actual credentials
+const DB_NAME = 'dainik_savera'; // Your DB name
+const DB_USER = 'postgres'; // Your DB user
+const DB_PASS = 'postgres'; // Your DB password - Use env vars in production!
+const DB_HOST = 'localhost';
+const DB_PORT = 5432;
+// --- Initialize Sequelize ---
+const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
+    host: DB_HOST,
+    port: DB_PORT,
+    dialect: 'postgres',
+    dialectModule: pg, // Explicitly provide the imported pg module
+    logging: (msg) => console.log('[Sequelize]', msg), // Log Sequelize queries (optional)
+    //todo sunil
+    // pool: false, // Disable pooling for simplicity
+});
+// --- End Update ---
+class UploadModel extends Model {
+}
+UploadModel.init({
+    uploadId: { type: DataTypes.STRING, primaryKey: true, allowNull: false },
+    originalFilename: { type: DataTypes.STRING, allowNull: false },
+    // Sequelize automatically adds createdAt and updatedAt columns
+}, {
+    sequelize,
+    modelName: 'Upload', // Keep model name simple
+    tableName: 'uploads_metadata',
+    // timestamps: true is the default, explicitly stating it is also fine
+    timestamps: true,
+});
+// --- Server Configuration ---
+const port = 8085;
+const hostname = 'localhost';
+const tusPath = '/files/';
+const uploadDir = './uploads';
+const absoluteUploadDir = path.resolve(uploadDir);
+// --- Ensure Upload Directory Exists ---
+async function ensureUploadDir() {
+    try {
+        await fs.promises.mkdir(absoluteUploadDir, { recursive: true });
+        console.log(`[Init] Upload directory created or exists: ${absoluteUploadDir}`);
+    }
+    catch (error) {
+        if (error.code !== 'EEXIST') {
+            console.error(`[Init] Error creating upload directory ${absoluteUploadDir}:`, error);
+            throw error; // Re-throw to be caught by initializeApp
+        }
+        else {
+            console.log(`[Init] Upload directory already exists: ${absoluteUploadDir}`);
+        }
+    }
+}
+// --- Sync Database and Start Server ---
+async function initializeApp() {
+    try {
+        console.log('[Init] Ensuring upload directory exists...');
+        await ensureUploadDir();
+        console.log('[Init] Authenticating database connection...');
+        await sequelize.authenticate();
+        console.log('[Sequelize] Connection has been established successfully.');
+        console.log('[Init] Synchronizing Sequelize models...');
+        await sequelize.sync({ alter: true });
+        console.log('[Sequelize] All models were synchronized successfully.');
+        console.log('[Init] Starting HTTP server...');
+        startHttpServer(); // Start server
+        console.log('[Init] Scheduling database cleanup job...');
+        scheduleDatabaseCleanup(); // Schedule cleanup job after server starts
+    }
+    catch (error) {
+        console.error('[Init] Failed to initialize application:', error);
+        process.exit(1);
+    }
+}
 // --- CORS Configuration ---
-const ALLOWED_ORIGIN = 'http://localhost:5173'; // Origin of your Svelte app
-const TUS_EXPOSED_HEADERS = [
-    'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable',
-    'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata',
-].join(', ');
-const TUS_ALLOWED_HEADERS = [
-    'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length',
-    'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With',
-].join(', ');
-const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'].join(', ');
-// --- Helper: Parse Upload-Metadata Header ---
+const ALLOWED_ORIGIN = 'http://localhost:5173';
+const TUS_EXPOSED_HEADERS = ['Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata'];
+const TUS_ALLOWED_HEADERS = ['Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With'];
+const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
+const corsOptions = { origin: ALLOWED_ORIGIN, methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
+const corsMiddleware = cors(corsOptions);
+// --- Helpers ---
 function parseMetadata(metadataHeader) {
     const metadata = {};
     if (!metadataHeader) {
         return metadata;
     }
-    metadataHeader.split(',').forEach((pair) => {
+    String(metadataHeader).split(',').forEach((pair) => {
         const kv = pair.trim().split(' ');
         if (kv.length === 2) {
             const key = kv[0];
@@ -32,7 +105,7 @@ function parseMetadata(metadataHeader) {
                 metadata[key] = Buffer.from(kv[1], 'base64').toString('utf-8');
             }
             catch (e) {
-                console.warn(`Failed to decode base64 metadata value for key ${key}:`, e);
+                console.warn(`[Metadata] Failed to decode base64 value for key ${key}:`, e);
                 metadata[key] = 'DECODING_ERROR';
             }
         }
@@ -42,7 +115,6 @@ function parseMetadata(metadataHeader) {
     });
     return metadata;
 }
-// --- Helper: Sanitize Filename ---
 function sanitizeFilename(filename) {
     if (!filename) {
         return '';
@@ -55,123 +127,256 @@ function sanitizeFilename(filename) {
     }
     return name;
 }
-// --- Configuration ---
-const port = 8085;
-const hostname = 'localhost';
-const tusPath = '/files/';
-const uploadDir = './uploads';
-const MAX_ID_LENGTH = 150;
-// --- Ensure Upload Directory Exists ---
-const absoluteUploadDir = path.resolve(uploadDir);
-try {
-    await fs.promises.mkdir(absoluteUploadDir, { recursive: true });
-    console.log(`Upload directory created or exists: ${absoluteUploadDir}`);
-}
-catch (error) {
-    if (error.code !== 'EEXIST') {
-        console.error(`Error creating upload directory ${absoluteUploadDir}:`, error);
-        process.exit(1);
+// --- Custom DataStore to Save Metadata to DB on Create ---
+class FileStoreWithDbMetadata extends FileStore {
+    constructor(options) {
+        super(options);
+        console.log('[DataStore] Custom FileStoreWithDbMetadata initialized.');
     }
-    else {
-        console.log(`Upload directory already exists: ${absoluteUploadDir}`);
+    async create(file) {
+        console.log('[DataStore] create() method invoked.');
+        const uploadId = file.id;
+        const originalFilename = file.metadata?.name;
+        console.log(`[DataStore] Extracted uploadId: ${uploadId}`);
+        console.log(`[DataStore] Extracted originalFilename from file.metadata: ${originalFilename}`);
+        let transaction = null;
+        try {
+            transaction = await sequelize.transaction();
+            if (uploadId && originalFilename) {
+                const [record, created] = await UploadModel.findOrCreate({
+                    where: { uploadId: uploadId },
+                    defaults: { uploadId: uploadId, originalFilename: originalFilename },
+                    transaction: transaction
+                });
+                if (created) {
+                    console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`);
+                }
+                else {
+                    console.warn(`[DataStore] Metadata record already existed in DB for ID: ${uploadId}.`);
+                }
+                await transaction.commit();
+            }
+            else {
+                if (!originalFilename)
+                    console.warn(`[DataStore] Could not save metadata to DB. Original filename ('name') missing in file.metadata.`);
+                if (!uploadId)
+                    console.warn(`[DataStore] Could not save metadata to DB. Upload ID missing from file object.`);
+                if (transaction) {
+                    await transaction.rollback();
+                }
+            }
+        }
+        catch (dbError) {
+            console.error(`[DataStore] Error during DB transaction for ID ${uploadId}:`, dbError);
+            if (transaction) {
+                try {
+                    await transaction.rollback();
+                    console.log('[DataStore] Rolled back transaction due to error.');
+                }
+                catch (rollbackError) {
+                    console.error('[DataStore] Error rolling back transaction:', rollbackError);
+                }
+            }
+        }
+        const createdUpload = await super.create(file);
+        return createdUpload;
     }
 }
+// --- End Custom DataStore ---
 // --- Create Tus Components ---
-const fileStore = new FileStore({ directory: absoluteUploadDir });
+const customFileStore = new FileStoreWithDbMetadata({ directory: absoluteUploadDir });
 const tusServer = new Server({
     path: tusPath,
-    datastore: fileStore,
-    namingFunction: (req) => {
-        // Using 'name' from Uppy's default metadata
-        const metadata = parseMetadata(req.headers['upload-metadata']);
-        const originalFilename = metadata.name || metadata.filename; // Check for 'name' first
-        const sanitized = sanitizeFilename(originalFilename);
-        const uniquePrefix = uuidv4().substring(0, 8);
-        let finalId;
-        if (sanitized) {
-            finalId = `${uniquePrefix}-${sanitized}`;
-            if (finalId.length > MAX_ID_LENGTH) {
-                const availableLength = MAX_ID_LENGTH - (uniquePrefix.length + 1);
-                const safeAvailableLength = Math.max(0, availableLength);
-                finalId = `${uniquePrefix}-${sanitized.substring(0, safeAvailableLength)}`;
-                finalId = finalId.replace(/[\.\_]$/, '');
+    datastore: customFileStore, // Use the custom datastore
+});
+// --- REMOVED POST_CREATE Handler (Logic moved to DataStore) ---
+// --- Modified POST_FINISH Handler (Removed DB cleanup) ---
+tusServer.on(EVENTS.POST_FINISH, async (event) => {
+    console.log(`[EVENT:POST_FINISH] Handler invoked.`);
+    const requestUrl = event.url;
+    if (!requestUrl) {
+        console.error(`[EVENT:POST_FINISH] Error: Could not determine upload URL from event.`);
+        return;
+    }
+    const urlParts = requestUrl.split(tusPath);
+    let uploadId = urlParts[1];
+    if (uploadId && uploadId.startsWith('/')) {
+        uploadId = uploadId.substring(1);
+    }
+    if (!uploadId) {
+        console.error(`[EVENT:POST_FINISH] Error: Could not parse upload ID from URL: ${requestUrl}`);
+        return;
+    }
+    console.log(`[EVENT:POST_FINISH] ✅ Upload complete for ID (cleaned): ${uploadId}.`);
+    let uploadRecord = null;
+    try {
+        console.log(`[Rename] Looking up metadata in DB for ID ${uploadId}...`);
+        uploadRecord = await UploadModel.findByPk(uploadId);
+        let originalFilename;
+        if (uploadRecord) {
+            const recordData = uploadRecord.get({ plain: true });
+            console.log(`[Rename] Found record dataValues:`, recordData);
+            originalFilename = recordData.originalFilename;
+        }
+        else {
+            console.log(`[Rename] Result from findByPk for ID ${uploadId}: Record NOT found (null)`);
+        }
+        console.log(`[Rename] Filename extracted from recordData: ${originalFilename}`);
+        if (originalFilename) {
+            const sanitizedFilename = sanitizeFilename(originalFilename);
+            if (sanitizedFilename) {
+                const currentPath = path.join(absoluteUploadDir, uploadId);
+                const newFilename = `${uploadId}-${sanitizedFilename}`;
+                const newPath = path.join(absoluteUploadDir, newFilename);
+                console.log(`[Rename] Current path: ${currentPath}`);
+                console.log(`[Rename] New path: ${newPath}`);
+                try {
+                    console.log(`[Rename] Checking existence: ${currentPath}`);
+                    await fs.promises.access(currentPath, fs.constants.F_OK);
+                    console.log(`[Rename] Exists. Attempting rename...`);
+                    await fs.promises.rename(currentPath, newPath);
+                    console.log(`[Rename] Successfully renamed file to: ${newFilename}`);
+                }
+                catch (renameError) {
+                    console.error(`[Rename] Error during rename process:`, renameError); /* Don't return here, allow finally block */
+                }
+            }
+            else {
+                console.warn(`[Rename] Original filename "${originalFilename}" sanitized to an empty string. File will not be renamed.`);
             }
         }
         else {
-            console.warn('No usable filename/name in metadata, generating full UUID for ID.');
-            finalId = uuidv4();
+            console.log(`[Rename] No metadata record OR no originalFilename found in DB for ID ${uploadId}. File will not be renamed.`);
         }
-        console.log(`Generated upload ID: ${finalId}`);
-        return finalId;
-    },
-});
-tusServer.on(EVENTS.POST_FINISH, (event) => {
-    console.log(`✅ Upload complete:`);
-    console.log(`   ID: ${event.file.id}`);
-    console.log(`   Size: ${event.file.size} bytes`);
-    console.log(`   Offset: ${event.file.offset}`);
-    console.log(`   Metadata:`, event.file.metadata);
-    const originalFilename = event.file.metadata?.name || event.file.metadata?.filename;
-    if (originalFilename) {
-        console.log(`   Original filename from metadata: ${originalFilename}`);
     }
-    const filePath = path.join(absoluteUploadDir, event.file.id);
-    console.log(`   File likely stored at: ${filePath}`);
+    catch (dbError) {
+        console.error(`[Rename] Error querying DB for ID ${uploadId}:`, dbError);
+    }
+    finally {
+        // --- REMOVED DB Cleanup from finally block ---
+        console.log(`[Rename][Finally] Finished processing POST_FINISH for ID ${uploadId}. DB record NOT deleted here.`);
+        // --- End Removal ---
+    }
 });
-tusServer.on(EVENTS.POST_TERMINATE, (event) => {
-    console.error(`⛔ Upload terminated unexpectedly for ID: ${event.file.id}`);
-    // You could add more detailed logging here if needed
+// --- Modified POST_TERMINATE Handler (Removed DB cleanup) ---
+tusServer.on(EVENTS.POST_TERMINATE, async (event) => {
+    let uploadId;
+    if (event.file?.id) {
+        uploadId = event.file.id;
+    }
+    else if (event.url) {
+        const urlParts = event.url.split(tusPath);
+        uploadId = urlParts[1];
+        if (uploadId && uploadId.startsWith('/')) {
+            uploadId = uploadId.substring(1);
+        }
+    }
+    if (uploadId) {
+        console.log(`[EVENT:POST_TERMINATE] ⛔ Upload terminated unexpectedly for ID: ${uploadId}.`);
+        // --- REMOVED DB Cleanup ---
+        console.log(`[EVENT:POST_TERMINATE] DB record for terminated upload ${uploadId} NOT deleted here.`);
+        // --- End Removal ---
+    }
+    else {
+        console.error(`[EVENT:POST_TERMINATE] Error: Received POST_TERMINATE event but could not determine upload ID.`);
+    }
 });
-// --- Create HTTP Server with CORS Handling ---
+tusServer.on('error', (error, event) => {
+    const reqId = event?.req?.headers['x-request-id'] || 'N/A';
+    console.error(`[EVENT:tusServer.error] Tus Server Error (Req ID: ${reqId})`, error);
+});
+// --- Create HTTP Server ---
 const httpServer = http.createServer((req, res) => {
-    // --- CORS Header Setup ---
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-    res.setHeader('Access-Control-Allow-Methods', TUS_ALLOWED_METHODS);
-    res.setHeader('Access-Control-Allow-Headers', TUS_ALLOWED_HEADERS);
-    res.setHeader('Access-Control-Expose-Headers', TUS_EXPOSED_HEADERS);
-    // --- Handle CORS Preflight (OPTIONS) Requests ---
-    if (req.method === 'OPTIONS') {
-        res.writeHead(204);
-        res.end();
-        return;
-    }
-    // --- Route Requests ---
-    const requestUrl = req.url ?? '';
-    // Let tus-server handle requests for the tus path
-    if (requestUrl.startsWith(tusPath)) {
-        // Removed the .catch() block here. Errors happening *after* handle()
-        // completes successfully might still be logged by Node or tusServer,
-        // but we won't try to send a 500 response if headers are already sent.
-        tusServer.handle(req, res);
-        return; // Let tusServer handle it
-    }
-    // --- Handle Other Non-Tus Routes ---
-    if (requestUrl === '/') {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end(`Welcome! Tus endpoint is at ${tusPath}`);
-        return;
-    }
-    // Default 404 for any other route
-    if (!res.headersSent) {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not Found');
-    }
-    else if (!res.writableEnded) {
-        res.end();
-    }
+    corsMiddleware(req, res, (err) => {
+        if (err) {
+            console.error("[CORS Middleware Error]", err);
+            if (!res.headersSent) {
+                res.writeHead(500, { "Content-Type": "text/plain" });
+                res.end("Internal Server Error (CORS Configuration)");
+            }
+            else if (!res.writableEnded) {
+                res.end();
+            }
+            return;
+        }
+        const reqUrl = req.url ?? '';
+        if (reqUrl.startsWith(tusPath)) {
+            tusServer.handle(req, res);
+            return;
+        }
+        if (reqUrl === '/') {
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end(`Welcome! Tus endpoint is at ${tusPath}`);
+            return;
+        }
+        if (!res.headersSent) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not Found');
+        }
+        else if (!res.writableEnded) {
+            res.end();
+        }
+    });
 });
-// --- Start Listening ---
-httpServer.listen(port, hostname, () => {
-    console.log(`🚀 tus server (ESM) listening at http://${hostname}:${port}${tusPath}`);
-    console.warn(`⚠️ Warning: Server is running without a file locker.`);
-    console.info(`ℹ️  Upload IDs generated using client filename metadata (if available).`);
-    console.info(`✅ CORS enabled for origin: ${ALLOWED_ORIGIN}`);
-});
+// --- Function to Start HTTP Server ---
+function startHttpServer() {
+    httpServer.listen(port, hostname, () => {
+        console.log(`🚀 tus server (ESM) listening at http://${hostname}:${port}${tusPath}`);
+        console.warn(`⚠️ Warning: Server is running without a file locker.`);
+        console.info(`ℹ️  Using default server-generated upload IDs.`);
+        console.info(`✅ CORS enabled via middleware for origin: ${ALLOWED_ORIGIN}`);
+        console.info(`💾 Storing upload metadata in PostgreSQL via Custom DataStore.`);
+        console.info(`📝 Files will be renamed on completion using 'id-sanitizedOriginalName' format.`);
+        console.info(`⏰ Database cleanup job scheduled.`); // Added info
+    });
+}
+// --- NEW: Schedule Database Cleanup ---
+function scheduleDatabaseCleanup() {
+    // Schedule to run, for example, every day at 2:00 AM
+    // Cron format: second minute hour day-of-month month day-of-week
+    // '0 2 * * *' means 2:00 AM daily
+    cron.schedule('0 2 * * *', async () => {
+        console.log('[Cron Cleanup] Running scheduled job to delete old upload metadata...');
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        try {
+            const deletedCount = await UploadModel.destroy({
+                where: {
+                    // --- Use the correct column name 'createdAt' ---
+                    createdAt: {
+                        [Op.lt]: twentyFourHoursAgo // Op.lt means "less than"
+                    }
+                    // --- End fix ---
+                }
+            });
+            console.log(`[Cron Cleanup] Deleted ${deletedCount} old metadata records.`);
+        }
+        catch (error) {
+            console.error('[Cron Cleanup] Error during scheduled cleanup:', error);
+        }
+    }, {
+        scheduled: true,
+        timezone: "Asia/Kolkata" // Optional: Specify your timezone
+    });
+    console.log(`[Cron Cleanup] Job scheduled to run daily at 2:00 AM.`);
+}
+// --- End Schedule Database Cleanup ---
+// --- Initialize App (DB connection, then start server & schedule job) ---
+initializeApp(); // Call the main initialization function
 // --- Graceful Shutdown ---
-process.on('SIGINT', () => {
-    console.log('\nCaught SIGINT, shutting down gracefully...');
-    httpServer.close(() => {
-        console.log('HTTP server closed.');
-        process.exit(0);
+process.on('SIGINT', async () => {
+    console.log('\n[Shutdown] Caught SIGINT, shutting down gracefully...');
+    // Optional: Stop cron jobs if needed (node-cron doesn't explicitly require it for process exit)
+    httpServer.close(async () => {
+        console.log('[Shutdown] HTTP server closed.');
+        try {
+            await sequelize.close();
+            console.log('[Shutdown] Database connection closed.');
+        }
+        catch (dbCloseError) {
+            console.error('[Shutdown] Error closing database connection:', dbCloseError);
+        }
+        finally {
+            process.exit(0);
+        }
     });
 });

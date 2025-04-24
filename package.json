@@ -25,6 +25,7 @@
     "cors": "^2.8.5",
     "node-cron": "^3.0.3",
     "pg": "^8.15.1",
+    "sequelize": "^6.37.7",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

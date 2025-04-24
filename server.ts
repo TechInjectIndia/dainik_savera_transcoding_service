@@ -16,8 +16,8 @@ import { FileStore } from '@tus/file-store'; // Import the base store
 // --- Database Configuration ---
 // Using placeholder values - REMEMBER TO REPLACE with your actual credentials
 const DB_NAME = 'dainik_savera'; // Your DB name
-const DB_USER = 'sumeet'; // Your DB user
-const DB_PASS = 'root'; // Your DB password - Use env vars in production!
+const DB_USER = 'postgres'; // Your DB user
+const DB_PASS = 'postgres'; // Your DB password - Use env vars in production!
 const DB_HOST = 'localhost';
 const DB_PORT = 5432;
 
@@ -27,7 +27,7 @@ const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
 	port: DB_PORT,
 	dialect: 'postgres',
 	dialectModule: pg, // Explicitly provide the imported pg module
-	logging: (msg) => console.log('[Sequelize]', msg), // Log Sequelize queries (optional)
+	logging: (msg:any) => console.log('[Sequelize]', msg), // Log Sequelize queries (optional)
 	//todo sunil
 	// pool: false, // Disable pooling for simplicity
 });
