@@ -145,7 +145,9 @@ tusServer.on(EVENTS.POST_CREATE, async (event) => {
         return;
     }
     const metadata = parseMetadata(metadataHeader);
+
     const originalFilename = metadata?.name;
+
     if (originalFilename) {
         try {
             const [record, created] = await Upload.findOrCreate({
