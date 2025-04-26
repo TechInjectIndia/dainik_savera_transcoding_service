@@ -7,6 +7,8 @@ import { Sequelize, DataTypes, Model, Transaction, Op } from 'sequelize'; // Imp
 import pg from 'pg'; // Import the pg driver directly
 import cron from 'node-cron'; // Import node-cron
 import { Upload } from '@tus/server'; // Import Upload type
+import {config} from 'dotenv';
+config();
 
 import { Server } from '@tus/server';
 // Assuming EVENTS import from @tus/utils works, otherwise adjust as needed
@@ -22,11 +24,13 @@ enum UploadStatus {
 
 // --- Database Configuration ---
 // Using placeholder values - REMEMBER TO REPLACE with your actual credentials
-const DB_NAME = 'dainik_savera'; // Your DB name
-const DB_USER = 'postgres'; // Your DB user
-const DB_PASS = 'postgres'; // Your DB password - Use env vars in production!
-const DB_HOST = 'localhost';
-const DB_PORT = 5432;
+const DB_NAME= process.env.DB_NAME;
+const DB_USER= process.env.DB_USER;
+const DB_PASS= process.env.DB_PASS;
+const DB_HOST= process.env.DB_HOST;
+const DB_PORT= parseInt(process.env.DB_PORT!);
+
+if(!DB_NAME || !DB_USER) throw new Error('DB_NAME is required');
 
 // --- Initialize Sequelize ---
 const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
@@ -212,8 +216,8 @@ class FileStoreWithDbMetadata extends FileStore {
 
 
 
-                if (created) { 
-					console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`); 
+                if (created) {
+					console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`);
 					 // Send metadata to external API
 					 const sanitizedFilename = sanitizeFilename(originalFilename);
 					 const renamedFile = `${uploadId}-${sanitizedFilename}`
@@ -331,8 +335,8 @@ tusServer.on(EVENTS.POST_FINISH, async (event: TusEvent) => {
                     renameError: null // Clear any previous error
                 });
                 console.log(`[Rename] Updated DB status to RENAMED for ID ${uploadId}`);
-			
-			
+
+
 			} else if (originalFilename) { // Only mark failed if rename was actually attempted
                 // Use the stored error message or a generic one
                 const errorMessage = renameAttemptError instanceof Error ? renameAttemptError.message : `Rename failed at ${new Date().toISOString()}`;

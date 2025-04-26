@@ -7,8 +7,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev-build-start": "npm run build && npm start",
-    "dev": "node --loader ts-node/esm server.ts"
+    "dev": "npm run build && npm start",
+    "dev-node": "node --loader ts-node/esm server.ts"
   },
   "keywords": [
     "tus",
