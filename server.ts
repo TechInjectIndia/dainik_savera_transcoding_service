@@ -98,7 +98,7 @@ UploadModel.init({
 const port = 8085;
 const hostname = 'localhost';
 const tusPath = '/files'; // Original path used in that version
-const uploadDir = './uploads';
+const uploadDir = '../../uploads';
 const absoluteUploadDir = path.resolve(uploadDir);
 
 // --- Ensure Upload Directory Exists ---
