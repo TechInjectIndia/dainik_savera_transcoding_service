@@ -12,7 +12,7 @@ import { Server } from '@tus/server';
 // Assuming EVENTS import from @tus/utils works, otherwise adjust as needed
 import { EVENTS } from '@tus/utils';
 import { FileStore } from '@tus/file-store'; // Import the base store
-
+import axios from 'axios'; // Import axios for HTTP requests
 // --- Define Upload Status Enum ---
 enum UploadStatus {
     UPLOADED = 'UPLOADED', // Initial state after file received
@@ -23,8 +23,8 @@ enum UploadStatus {
 // --- Database Configuration ---
 // Using placeholder values - REMEMBER TO REPLACE with your actual credentials
 const DB_NAME = 'dainik_savera'; // Your DB name
-const DB_USER = 'sumeet'; // Your DB user
-const DB_PASS = 'root'; // Your DB password - Use env vars in production!
+const DB_USER = 'postgres'; // Your DB user
+const DB_PASS = 'postgres'; // Your DB password - Use env vars in production!
 const DB_HOST = 'localhost';
 const DB_PORT = 5432;
 
@@ -210,8 +210,18 @@ class FileStoreWithDbMetadata extends FileStore {
                 });
                 // --- End set initial status ---
 
-                if (created) { console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`); }
-                else { console.warn(`[DataStore] Metadata record already existed in DB for ID: ${uploadId}.`); }
+
+
+                if (created) { 
+					console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`); 
+					 // Send metadata to external API
+					 const sanitizedFilename = sanitizeFilename(originalFilename);
+					 const renamedFile = `${uploadId}-${sanitizedFilename}`
+					 await axios.put(`http://localhost:3004/api/video-upload/updatePathOfVideoUpload/${videoId}`,{
+						path: renamedFile
+					});
+				}
+				else { console.warn(`[DataStore] Metadata record already existed in DB for ID: ${uploadId}.`); }
 
                 await transaction.commit();
 
@@ -321,7 +331,9 @@ tusServer.on(EVENTS.POST_FINISH, async (event: TusEvent) => {
                     renameError: null // Clear any previous error
                 });
                 console.log(`[Rename] Updated DB status to RENAMED for ID ${uploadId}`);
-            } else if (originalFilename) { // Only mark failed if rename was actually attempted
+			
+			
+			} else if (originalFilename) { // Only mark failed if rename was actually attempted
                 // Use the stored error message or a generic one
                 const errorMessage = renameAttemptError instanceof Error ? renameAttemptError.message : `Rename failed at ${new Date().toISOString()}`;
                 await uploadRecord.update({
