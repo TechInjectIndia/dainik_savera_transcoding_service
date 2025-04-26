@@ -41,6 +41,7 @@ const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
 // --- Define Sequelize Model ---
 interface UploadAttributes {
     uploadId: string;
+	videoId: number; // Added videoId field
     originalFilename: string;
     status?: UploadStatus; // Optional in interface for query flexibility
     renamedFilename?: string | null;
@@ -53,6 +54,7 @@ interface UploadAttributes {
 // Use 'declare' for all attributes managed by Sequelize to avoid shadowing warnings
 class UploadModel extends Model<UploadAttributes> implements UploadAttributes {
     declare uploadId: string;
+	declare videoId: number; // Added videoId field
     declare originalFilename: string;
     declare status: UploadStatus; // Non-null instance property
     declare renamedFilename: string | null;
@@ -64,6 +66,7 @@ class UploadModel extends Model<UploadAttributes> implements UploadAttributes {
 
 UploadModel.init({
     uploadId: { type: DataTypes.STRING, primaryKey: true, allowNull: false },
+	videoId: { type: DataTypes.INTEGER, allowNull: false }, // Added videoId field
     originalFilename: { type: DataTypes.STRING, allowNull: false },
     status: {
         type: DataTypes.ENUM(...Object.values(UploadStatus)),
@@ -98,7 +101,7 @@ UploadModel.init({
 const port = 8085;
 const hostname = 'localhost';
 const tusPath = '/files'; // Original path used in that version
-const uploadDir = './uploads';
+const uploadDir = '../../uploads';
 const absoluteUploadDir = path.resolve(uploadDir);
 
 // --- Ensure Upload Directory Exists ---
@@ -178,9 +181,12 @@ class FileStoreWithDbMetadata extends FileStore {
 
     async create(file: Upload): Promise<Upload> {
         console.log('[DataStore] create() method invoked.');
-
+        let videoId: number = 0; // Initialize videoId with a default value
         const uploadId = file.id;
         const originalFilename = file.metadata?.name;
+        if(file.metadata?.videoId){
+            videoId = parseInt(file.metadata?.videoId?.toString()); // Extract videoId if needed
+        }
         console.log(`[DataStore] Extracted uploadId: ${uploadId}`);
         console.log(`[DataStore] Extracted originalFilename from file.metadata: ${originalFilename}`);
 
@@ -194,6 +200,7 @@ class FileStoreWithDbMetadata extends FileStore {
                     where: { uploadId: uploadId },
                     defaults: {
                         uploadId: uploadId,
+						videoId: videoId, // Save videoId if needed
                         originalFilename: originalFilename,
                         status: UploadStatus.UPLOADED, // Set initial status
                         renamedFilename: null,
