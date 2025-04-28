@@ -25,8 +25,8 @@ enum UploadStatus {
 // --- Database Configuration ---
 // Using placeholder values - REMEMBER TO REPLACE with your actual credentials
 const DB_NAME= process.env.DB_NAME;
-const DB_USER= process.env.DB_USER;
-const DB_PASS= process.env.DB_PASS;
+const DB_USER= process.env.DB_USERNAME;
+const DB_PASS= process.env.DB_PASSWORD;
 const DB_HOST= process.env.DB_HOST;
 const DB_PORT= parseInt(process.env.DB_PORT!);
 
@@ -150,7 +150,7 @@ const ALLOWED_ORIGIN = 'http://localhost:5173'; // Original single origin
 const TUS_EXPOSED_HEADERS = [ 'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata' ];
 const TUS_ALLOWED_HEADERS = [ 'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With' ];
 const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
-const corsOptions: cors.CorsOptions = { origin: ALLOWED_ORIGIN, methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
+const corsOptions: cors.CorsOptions = { origin: '*', methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
 const corsMiddleware = cors(corsOptions);
 
 // --- Helpers ---
