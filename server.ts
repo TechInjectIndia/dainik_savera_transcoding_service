@@ -7,7 +7,7 @@ import { Sequelize, DataTypes, Model, Transaction, Op } from 'sequelize'; // Imp
 import pg from 'pg'; // Import the pg driver directly
 import cron from 'node-cron'; // Import node-cron
 import { Upload } from '@tus/server'; // Import Upload type
-import {config} from 'dotenv';
+import { config } from 'dotenv';
 config();
 
 import { Server } from '@tus/server';
@@ -15,6 +15,7 @@ import { Server } from '@tus/server';
 import { EVENTS } from '@tus/utils';
 import { FileStore } from '@tus/file-store'; // Import the base store
 import axios from 'axios'; // Import axios for HTTP requests
+import { dir } from 'node:console';
 // --- Define Upload Status Enum ---
 enum UploadStatus {
     UPLOADED = 'UPLOADED', // Initial state after file received
@@ -24,13 +25,13 @@ enum UploadStatus {
 
 // --- Database Configuration ---
 // Using placeholder values - REMEMBER TO REPLACE with your actual credentials
-const DB_NAME= process.env.DB_NAME;
-const DB_USER= process.env.DB_USERNAME;
-const DB_PASS= process.env.DB_PASSWORD;
-const DB_HOST= process.env.DB_HOST;
-const DB_PORT= parseInt(process.env.DB_PORT!);
+const DB_NAME = process.env.DB_NAME;
+const DB_USER = process.env.DB_USERNAME;
+const DB_PASS = process.env.DB_PASSWORD;
+const DB_HOST = process.env.DB_HOST;
+const DB_PORT = parseInt(process.env.DB_PORT!);
 
-if(!DB_NAME || !DB_USER) throw new Error('DB_NAME is required');
+if (!DB_NAME || !DB_USER) throw new Error('DB_NAME is required');
 
 // --- Initialize Sequelize ---
 const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
@@ -45,7 +46,7 @@ const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
 // --- Define Sequelize Model ---
 interface UploadAttributes {
     uploadId: string;
-	videoId: number; // Added videoId field
+    videoId: number; // Added videoId field
     originalFilename: string;
     status?: UploadStatus; // Optional in interface for query flexibility
     renamedFilename?: string | null;
@@ -58,7 +59,18 @@ interface UploadAttributes {
 // Use 'declare' for all attributes managed by Sequelize to avoid shadowing warnings
 class UploadModel extends Model<UploadAttributes> implements UploadAttributes {
     declare uploadId: string;
-	declare videoId: number; // Added videoId field
+    declare videoId: number; // Added videoId field
+    declare originalFilename: string;
+    declare status: UploadStatus; // Non-null instance property
+    declare renamedFilename: string | null;
+    declare renameError: string | null;
+    declare readonly createdAt: Date; // Readonly instance property
+    declare readonly updatedAt: Date; // Readonly instance property
+}
+
+class AdsModel extends Model<UploadAttributes> implements UploadAttributes {
+    declare uploadId: string;
+    declare videoId: number; // Added videoId field
     declare originalFilename: string;
     declare status: UploadStatus; // Non-null instance property
     declare renamedFilename: string | null;
@@ -68,9 +80,45 @@ class UploadModel extends Model<UploadAttributes> implements UploadAttributes {
 }
 // --- End Update ---
 
+AdsModel.init({
+    uploadId: { type: DataTypes.STRING, primaryKey: true, allowNull: false },
+    videoId: { type: DataTypes.INTEGER, allowNull: false }, // Added videoId field
+    originalFilename: { type: DataTypes.STRING, allowNull: false },
+    status: {
+        type: DataTypes.ENUM(...Object.values(UploadStatus)),
+        allowNull: false, // DB constraint
+        defaultValue: UploadStatus.UPLOADED,
+    },
+    renamedFilename: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    renameError: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    // Explicitly define timestamps columns for clarity (optional)
+    // createdAt: {
+    //   type: DataTypes.DATE,
+    //   allowNull: false, // Default behavior
+    // },
+    // updatedAt: {
+    //   type: DataTypes.DATE,
+    //   allowNull: false, // Default behavior
+    // }
+}, {
+    sequelize,
+    modelName: 'ads', // Keep model name simple
+    tableName: 'ads_metadata',
+    timestamps: true, // Ensure timestamps are enabled (default is true)
+});
+
+
+
+
 UploadModel.init({
     uploadId: { type: DataTypes.STRING, primaryKey: true, allowNull: false },
-	videoId: { type: DataTypes.INTEGER, allowNull: false }, // Added videoId field
+    videoId: { type: DataTypes.INTEGER, allowNull: false }, // Added videoId field
     originalFilename: { type: DataTypes.STRING, allowNull: false },
     status: {
         type: DataTypes.ENUM(...Object.values(UploadStatus)),
@@ -104,9 +152,13 @@ UploadModel.init({
 // --- Server Configuration ---
 const port = 8085;
 const hostname = 'localhost';
-const tusPath = '/files'; // Original path used in that version
+const tusPath = '/files';
+const tusAdPath = '/ads'; // Added for ad uploads
+// Original path used in that version
 const uploadDir = '../../uploads';
+const adUploadDir = '../../ads'; // Added for ad uploads
 const absoluteUploadDir = path.resolve(uploadDir);
+const absoluteUploadDirAd = path.resolve(adUploadDir); // Added for ad uploads
 
 // --- Ensure Upload Directory Exists ---
 async function ensureUploadDir() {
@@ -147,8 +199,8 @@ async function initializeApp() {
 
 // --- CORS Configuration ---
 const ALLOWED_ORIGIN = 'http://localhost:5173'; // Original single origin
-const TUS_EXPOSED_HEADERS = [ 'Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata' ];
-const TUS_ALLOWED_HEADERS = [ 'Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With' ];
+const TUS_EXPOSED_HEADERS = ['Upload-Offset', 'Upload-Length', 'Tus-Version', 'Tus-Resumable', 'Tus-Max-Size', 'Tus-Extension', 'Location', 'Upload-Metadata'];
+const TUS_ALLOWED_HEADERS = ['Authorization', 'Content-Type', 'Tus-Resumable', 'Upload-Length', 'Upload-Metadata', 'Upload-Offset', 'X-HTTP-Method-Override', 'X-Requested-With'];
 const TUS_ALLOWED_METHODS = ['POST', 'PATCH', 'HEAD', 'DELETE', 'OPTIONS'];
 const corsOptions: cors.CorsOptions = { origin: '*', methods: TUS_ALLOWED_METHODS, allowedHeaders: TUS_ALLOWED_HEADERS, exposedHeaders: TUS_EXPOSED_HEADERS, optionsSuccessStatus: 204 };
 const corsMiddleware = cors(corsOptions);
@@ -178,17 +230,20 @@ function sanitizeFilename(filename: string | undefined | null): string {
 
 // --- Custom DataStore to Save Metadata to DB on Create ---
 class FileStoreWithDbMetadata extends FileStore {
+    public directory: string = ""; // Match visibility with the base class
     constructor(options: { directory: string }) {
-        super(options);
+        super(options); // Call super before accessing 'this'
+        this.directory = options.directory;
         console.log('[DataStore] Custom FileStoreWithDbMetadata initialized.');
     }
 
     async create(file: Upload): Promise<Upload> {
+        console.log(this.directory === absoluteUploadDirAd);
         console.log('[DataStore] create() method invoked.');
         let videoId: number = 0; // Initialize videoId with a default value
         const uploadId = file.id;
         const originalFilename = file.metadata?.name;
-        if(file.metadata?.videoId){
+        if (file.metadata?.videoId) {
             videoId = parseInt(file.metadata?.videoId?.toString()); // Extract videoId if needed
         }
         console.log(`[DataStore] Extracted uploadId: ${uploadId}`);
@@ -198,13 +253,13 @@ class FileStoreWithDbMetadata extends FileStore {
         try {
             transaction = await sequelize.transaction();
 
-            if (uploadId && originalFilename) {
+            if (uploadId && originalFilename && this.directory !== absoluteUploadDirAd) {
                 // --- Set initial status when creating ---
                 const [record, created] = await UploadModel.findOrCreate({
                     where: { uploadId: uploadId },
                     defaults: {
                         uploadId: uploadId,
-						videoId: videoId, // Save videoId if needed
+                        videoId: videoId, // Save videoId if needed
                         originalFilename: originalFilename,
                         status: UploadStatus.UPLOADED, // Set initial status
                         renamedFilename: null,
@@ -214,22 +269,52 @@ class FileStoreWithDbMetadata extends FileStore {
                 });
                 // --- End set initial status ---
 
-
-
                 if (created) {
-					console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`);
-					 // Send metadata to external API
-					 const sanitizedFilename = sanitizeFilename(originalFilename);
-					 const renamedFile = `${uploadId}-${sanitizedFilename}`
-					 await axios.put(`http://localhost:3004/api/video-upload/updatePathOfVideoUpload/${videoId}`,{
-						path: renamedFile
-					});
-				}
-				else { console.warn(`[DataStore] Metadata record already existed in DB for ID: ${uploadId}.`); }
+                    console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`);
+                    // Send metadata to external API
+                    const sanitizedFilename = sanitizeFilename(originalFilename);
+                    const renamedFile = `${uploadId}-${sanitizedFilename}`
+                    await axios.put(`http://localhost:3004/api/video-upload/updatePathOfVideoUpload/${videoId}`, {
+                        path: renamedFile
+                    });
+                }
+                else { console.warn(`[DataStore] Metadata record already existed in DB for ID: ${uploadId}.`); }
 
                 await transaction.commit();
 
-            } else {
+            } else if (uploadId && originalFilename && this.directory === absoluteUploadDirAd) {
+
+                console.log("nITESH");
+                console.log(uploadId);
+                
+                
+                // --- Set initial status when creating ---
+                const [record, created] = await AdsModel.findOrCreate({
+                    where: { uploadId: uploadId },
+                    defaults: {
+                        uploadId: uploadId,
+                        videoId: videoId, // Save videoId if needed
+                        originalFilename: originalFilename,
+                        status: UploadStatus.UPLOADED, // Set initial status
+                        renamedFilename: null,
+                        renameError: null,
+                    },
+                    transaction: transaction
+                });
+                // --- End set initial status ---
+
+                if (created) {
+                    console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`);
+                    // Send metadata to external API
+                    const sanitizedFilename = sanitizeFilename(originalFilename);
+                    const renamedFile = `${uploadId}-${sanitizedFilename}`
+                }
+                else { console.warn(`[DataStore] Metadata record already existed in DB for ID: ${uploadId}.`); }
+
+                await transaction.commit();
+
+            }
+            else {
                 if (!originalFilename) console.warn(`[DataStore] Could not save metadata to DB. Original filename ('name') missing in file.metadata.`);
                 if (!uploadId) console.warn(`[DataStore] Could not save metadata to DB. Upload ID missing from file object.`);
                 if (transaction) { await transaction.rollback(); }
@@ -254,6 +339,13 @@ const customFileStore = new FileStoreWithDbMetadata({ directory: absoluteUploadD
 const tusServer = new Server({
     path: tusPath,
     datastore: customFileStore, // Use the custom datastore
+    // Note: respectForwardedHeaders was added later, removed for this version
+});
+
+const customAdFileStore = new FileStoreWithDbMetadata({ directory: absoluteUploadDirAd });
+const tusAdServer = new Server({
+    path: tusAdPath,
+    datastore: customAdFileStore, // Use the custom datastore
     // Note: respectForwardedHeaders was added later, removed for this version
 });
 
@@ -337,7 +429,103 @@ tusServer.on(EVENTS.POST_FINISH, async (event: TusEvent) => {
                 console.log(`[Rename] Updated DB status to RENAMED for ID ${uploadId}`);
 
 
-			} else if (originalFilename) { // Only mark failed if rename was actually attempted
+            } else if (originalFilename) { // Only mark failed if rename was actually attempted
+                // Use the stored error message or a generic one
+                const errorMessage = renameAttemptError instanceof Error ? renameAttemptError.message : `Rename failed at ${new Date().toISOString()}`;
+                await uploadRecord.update({
+                    status: UploadStatus.RENAME_FAILED,
+                    renameError: errorMessage.substring(0, 1024) // Limit error message length if needed
+                });
+                console.log(`[Rename] Updated DB status to RENAME_FAILED for ID ${uploadId}`);
+            } else {
+                console.log(`[Rename] No rename attempted, DB status remains UPLOADED for ID ${uploadId}`);
+            }
+        } catch (updateError) {
+            console.error(`[Rename] Error updating DB status for ID ${uploadId}:`, updateError);
+        }
+    } else {
+        console.warn(`[Rename] Cannot update DB status, record for ID ${uploadId} was not found.`);
+    }
+    // --- End DB Status Update ---
+
+    // --- REMOVED DB Cleanup from finally block ---
+    console.log(`[Rename][Finally] Finished processing POST_FINISH for ID ${uploadId}. DB record NOT deleted here.`);
+    // --- End Removal ---
+});
+tusAdServer.on(EVENTS.POST_FINISH, async (event: TusEvent) => {
+    console.log(`[EVENT:POST_FINISH] Handler invoked.`);
+    const requestUrl = event.url;
+    if (!requestUrl) { console.error(`[EVENT:POST_FINISH] Error: Could not determine upload URL from event.`); return; }
+
+    const urlParts = requestUrl.split(tusAdPath);
+    let uploadId = urlParts[1];
+    if (uploadId && uploadId.startsWith('/')) { uploadId = uploadId.substring(1); }
+
+    if (!uploadId) { console.error(`[EVENT:POST_FINISH] Error: Could not parse upload ID from URL: ${requestUrl}`); return; }
+
+    console.log(`[EVENT:POST_FINISH] ✅ Upload complete for ID (cleaned): ${uploadId}.`);
+    let uploadRecord: AdsModel | null = null;
+    let originalFilename: string | undefined;
+    let renameAttemptError: Error | null = null; // Store potential rename error
+    let success = false; // Flag to track if rename was attempted and succeeded
+    let newFilename: string | null = null; // Store the new filename if successful
+
+    try {
+        console.log(`[Rename] Looking up metadata in DB for ID ${uploadId}...`);
+        uploadRecord = await AdsModel.findByPk(uploadId);
+
+        let recordData: UploadAttributes | undefined; // Define recordData scope
+        if (uploadRecord) {
+            recordData = uploadRecord.get({ plain: true }); // Get plain data
+            console.log(`[Rename] Found record dataValues:`, recordData);
+            originalFilename = recordData.originalFilename; // Access from plain data
+        } else {
+            console.log(`[Rename] Result from findByPk for ID ${uploadId}: Record NOT found (null)`);
+        }
+
+        console.log(`[Rename] Filename extracted from recordData: ${originalFilename}`);
+
+        if (originalFilename) {
+            const sanitizedFilename = sanitizeFilename(originalFilename);
+            if (sanitizedFilename) {
+                const currentPath = path.join(absoluteUploadDirAd, uploadId);
+                newFilename = `${uploadId}-${sanitizedFilename}`; // Assign potential new name
+                const newPath = path.join(absoluteUploadDirAd, newFilename);
+                console.log(`[Rename] Current path: ${currentPath}`);
+                console.log(`[Rename] New path: ${newPath}`);
+                try {
+                    console.log(`[Rename] Checking existence: ${currentPath}`);
+                    await fs.promises.access(currentPath, fs.constants.F_OK);
+                    console.log(`[Rename] Exists. Attempting rename...`);
+                    await fs.promises.rename(currentPath, newPath);
+                    console.log(`[Rename] Successfully renamed file to: ${newFilename}`);
+                    success = true; // Mark as success
+                } catch (renameError: any) {
+                    console.error(`[Rename] Error during rename process:`, renameError);
+                    renameAttemptError = renameError; // Store the error
+                }
+            } else { console.warn(`[Rename] Original filename "${originalFilename}" sanitized to an empty string. File will not be renamed.`); }
+        } else {
+            console.log(`[Rename] No metadata record OR no originalFilename found in DB for ID ${uploadId}. File will not be renamed.`);
+        }
+
+    } catch (dbError) {
+        console.error(`[Rename] Error querying DB for ID ${uploadId}:`, dbError);
+    }
+
+    // --- Update DB Status After Rename Attempt ---
+    if (uploadRecord) {
+        try {
+            if (success && newFilename) {
+                await uploadRecord.update({
+                    status: UploadStatus.RENAMED,
+                    renamedFilename: newFilename,
+                    renameError: null // Clear any previous error
+                });
+                console.log(`[Rename] Updated DB status to RENAMED for ID ${uploadId}`);
+
+
+            } else if (originalFilename) { // Only mark failed if rename was actually attempted
                 // Use the stored error message or a generic one
                 const errorMessage = renameAttemptError instanceof Error ? renameAttemptError.message : `Rename failed at ${new Date().toISOString()}`;
                 await uploadRecord.update({
@@ -375,6 +563,19 @@ tusServer.on(EVENTS.POST_TERMINATE, async (event: TusEvent) => {
     } else { console.error(`[EVENT:POST_TERMINATE] Error: Received POST_TERMINATE event but could not determine upload ID.`); }
 });
 
+tusAdServer.on(EVENTS.POST_TERMINATE, async (event: TusEvent) => {
+    let uploadId: string | undefined;
+    if (event.file?.id) { uploadId = event.file.id; }
+    else if (event.url) { const urlParts = event.url.split(tusPath); uploadId = urlParts[1]; if (uploadId && uploadId.startsWith('/')) { uploadId = uploadId.substring(1); } }
+
+    if (uploadId) {
+        console.log(`[EVENT:POST_TERMINATE] ⛔ Upload terminated unexpectedly for ID: ${uploadId}.`);
+        // --- REMOVED DB Cleanup ---
+        console.log(`[EVENT:POST_TERMINATE] DB record for terminated upload ${uploadId} NOT deleted here.`);
+        // --- End Removal ---
+    } else { console.error(`[EVENT:POST_TERMINATE] Error: Received POST_TERMINATE event but could not determine upload ID.`); }
+});
+
 tusServer.on('error' as any, (error: Error, event?: { req: http.IncomingMessage, res: http.ServerResponse }) => {
     const reqId = event?.req?.headers['x-request-id'] || 'N/A';
     console.error(`[EVENT:tusServer.error] Tus Server Error (Req ID: ${reqId})`, error);
@@ -395,7 +596,11 @@ const httpServer = http.createServer((req, res) => {
         if (reqUrl.startsWith(tusPath)) {
             tusServer.handle(req, res);
             return;
+        } else if (reqUrl.startsWith('/ads')) {
+            tusAdServer.handle(req, res);
+            return;
         }
+
         if (reqUrl === '/') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end(`Welcome! Tus endpoint is at ${tusPath}`); return; }
         if (!res.headersSent) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not Found'); }
         else if (!res.writableEnded) { res.end(); }
