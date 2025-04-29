@@ -304,10 +304,19 @@ class FileStoreWithDbMetadata extends FileStore {
                 // --- End set initial status ---
 
                 if (created) {
-                    console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`);
-                    // Send metadata to external API
-                    const sanitizedFilename = sanitizeFilename(originalFilename);
+                       const sanitizedFilename = sanitizeFilename(originalFilename);
                     const renamedFile = `${uploadId}-${sanitizedFilename}`
+                   const res =  await fetch(`http://localhost:3004/api/ads/${videoId}/path`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ path:renamedFile })
+                    });
+
+                    console.log(res)
+
+                    console.log(`[DataStore] Saved metadata to DB for ID: ${uploadId}, Filename: ${originalFilename}`);
                 }
                 else { console.warn(`[DataStore] Metadata record already existed in DB for ID: ${uploadId}.`); }
 
