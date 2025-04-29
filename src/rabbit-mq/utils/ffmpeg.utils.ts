@@ -21,7 +21,7 @@ const transcodeResolution = (
     queuedTaskId: number
 ):Promise<Playlist> => {
     return new Promise((resolve, reject) => {
-        const resFolder = path.join(outputDir, `${resolution.width}p`);
+        const resFolder = path.join(outputDir, `${resolution.height}p`);
         fs.mkdirSync(resFolder, { recursive: true });
 
         const outputM3U8 = path.join(resFolder, `index.m3u8`);
