@@ -32,7 +32,7 @@ const config = {
     },
     schedulerInterval: process.env.SCHEDULER_INTERVAL || 60000,
     apiUrl: {
-      url: process.env.API_BASE_URL || 'http://localhost:3004/api/'
+      url: process.env.API_BASE_URL || 'https://videos.dainiksaveratimes.com/api/'
     }
   };
 
