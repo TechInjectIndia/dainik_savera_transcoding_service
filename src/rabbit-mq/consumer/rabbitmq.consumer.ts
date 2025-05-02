@@ -3,7 +3,7 @@ import { getChannel } from "../connection/rabbitmq.connection";
 import { transcodeVideo } from "../utils/ffmpeg.utils";
 
 const startTranscodeVideoConsumer = async () => {
-    const channel = await getChannel();
+    const channel = getChannel();
 
     await channel.assertQueue(RABBITMQ_CONFIG.queue, { durable: true });
     await channel.prefetch(1);

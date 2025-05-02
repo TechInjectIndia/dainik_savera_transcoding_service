@@ -100,10 +100,12 @@ const transcodeVideo = async (
 
         fs.writeFileSync(masterPlaylistPath, "#EXTM3U\n" + masterPlaylistContent);
 
-        await axios.post(`${config.apiUrl.url}videos/create`,{
+        const res = await axios.post(`${config.apiUrl.url}videos/create`,{
             queued_task_id: queuedTaskId,
             video_url: masterPlaylistPath
         })
+        console.log(res);
+        
 
         await axios.put(`${config.apiUrl.url}queued-tasks/update/${queuedTaskId}`, {
             status: "Completed",

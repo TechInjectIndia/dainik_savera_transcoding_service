@@ -5,7 +5,7 @@ import { RABBITMQ_CONFIG } from "../config/rabbitmq.config";
 import { VideoTranscodeJob } from "../interface/video-transcode-job.interface";
 import { sendTranscodeVideoJob } from "../producer/video-transcode.producer";
 
-const SCHEDULER_INTERVAL = Number(process.env.SCHEDULER_INTERVAL) || 60000; // 1 minute
+const SCHEDULER_INTERVAL = Number(process.env.SCHEDULER_INTERVAL) || 60000;// 1 minute
 
 const processPendingTasks = async () => {
     try {
@@ -54,7 +54,6 @@ const fetchPendingTasks = async (limit: number): Promise<any[]> => {
 const processTask = async (task: any): Promise<any> => {
     try {
         const videoUpload = task.videoUpload;
-        await updateTaskStatus(task.id, 'Queued');
         const jobPayload:VideoTranscodeJob = {
             inputPath: videoUpload.path,
             outputPath: `transcoded/${Date.now()}-${videoUpload.title}`,
@@ -62,6 +61,7 @@ const processTask = async (task: any): Promise<any> => {
             queuedTaskId: task.id
         }
         await sendTranscodeVideoJob(jobPayload);
+        // await updateTaskStatus(task.id, 'Queued');
     } catch (error) {
         console.error("Error processing task:", error);
         await updateTaskStatus(task.id, 'Error', error);
