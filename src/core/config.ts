@@ -24,7 +24,7 @@ const config = {
       expiresIn: process.env.JWT_EXPIRES_IN || '1d'
     },
     ffmpeg: {
-      path: process.env.FFMPEG_PATH || '/usr/bin/ffmpeg'
+      path: process.env.FFMPEG_PATH || 'C:/ffmpeg/bin/ffmpeg.exe'
     },
     rabbitMQ: {
         url: process.env.RABBITMQ_URL || 'amqp://localhost',
